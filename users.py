@@ -19,7 +19,6 @@ def load_users():
         #     f.write(file_content)
 
         with open("json/users.json", "r") as f:
-            print("ok")
             return json.load(f)
     except FileNotFoundError:
         return {}
@@ -28,7 +27,7 @@ def load_users():
         return {}
 
 
-def create_account(username, password, email):
+def create_account(username, password, email, sexe, age):
     users = load_users()
 
     # Vérifier si le nom d'utilisateur existe déjà
@@ -37,12 +36,12 @@ def create_account(username, password, email):
         return False
 
     # Vérifier si l'email est déjà utilisé
-    if any(user_data["email"] == email for user_data in users.values()):
+    if any(user_data["email"] == hash(email) for user_data in users.values()):
         print("L'email est déjà utilisé.")
         return False
 
     # Ajouter le nouvel utilisateur
-    users[username] = {"password": hash_password(password), "email": email}
+    users[username] = {"password": hash(password), "email": hash(email), "sexe": sexe, "age": age}
     save_users(users)
     return True
 
@@ -64,13 +63,13 @@ def save_users(users):
         st.error(f"Erreur lors de la sauvegarde des utilisateurs : {e}")
         print(f"Erreur lors de la sauvegarde des utilisateurs : {e}")
 
-def hash_password(password):
-    return hashlib.sha256(password.encode()).hexdigest()
+def hash(element):
+    return hashlib.sha256(element.encode()).hexdigest()
 
 
 def verify_password(username, password):
     users = load_users()
-    if username in users and users[username]["password"] == hash_password(password):
+    if username in users and users[username]["password"] == hash(password):
         return True
     return False
 
@@ -97,14 +96,16 @@ def create_account_page():
     username = st.text_input("Nom d'utilisateur")
     password = st.text_input("Mot de passe", type="password")
     email = st.text_input("Email")
+    sexe = st.radio("Tu es",["une fille", "un garçon"])
+    age = st.text_input("Quel est ton age ?")
 
     if st.button("Créer le compte"):
-        if create_account(username, password, email):
+        if create_account(username, password, email, sexe, age):
             st.success(
                 "Compte créé avec succès ! Vous pouvez maintenant vous connecter."
             )
         else:
-            st.error("Un compte avec ce nom d'utilisateur existe déjà.")
+            st.error("Un compte avec ce nom d'utilisateur ou cet email existe déjà.")
 
 
 def forgot_password_page():
@@ -140,6 +141,8 @@ def reinit_code_validation():
             if data["email"] == st.session_state.reset_email:
                 username = user
                 break
+            else:
+                st.error("souci email.")
 
         if username and verify_reset_code(username, reset_code):
             st.session_state.reset_step = "new_password"
@@ -170,23 +173,21 @@ def generate_reset_code():
 
 
 def send_reinit_mail():
-    email = st.text_input("Entrez votre email")
+    receiver_email = st.text_input("Entrez votre email")
     if st.button("Envoyer un code de réinitialisation"):
         users = load_users()
         user_found = False
 
         for username, user_data in users.items():
-            if user_data["email"] == email:
+            if hash(receiver_email) == users[username]["email"]:
                 reset_code = generate_reset_code()
                 users = load_users()
-                print(reset_code)
                 if username in users:
                     users[username]["reset_code"] = reset_code
                     save_users(users)
                 else:
                     raise ValueError("Utilisateur introuvable.")
 
-                receiver_email = email
                 subject = "Code de réinitialisation de mot de passe"
                 body = f"Bonjour {username},\n\nVotre code de réinitialisation est : {reset_code}\n\nCordialement."
 
@@ -214,9 +215,9 @@ def send_reinit_mail():
                     print(f"Erreur SMTP : {e}")
 
                 user_found = True
-                st.session_state.reset_email = email
+                st.session_state.reset_email = hash(receiver_email)
                 st.session_state.reset_step = "code"
-                st.success(f"Un code de réinitialisation a été envoyé à {email}.")
+                st.success(f"Un code de réinitialisation a été envoyé à {receiver_email}.")
                 st.rerun()
                 break
 
@@ -228,7 +229,7 @@ def reset_user_password(email, new_password):
     users = load_users()
     for username, user_data in users.items():
         if user_data["email"] == email:
-            hashed_password = hash_password(new_password)
+            hashed_password = hash(new_password)
             users[username]["password"] = hashed_password
             save_users(users)
             return True
