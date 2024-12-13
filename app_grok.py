@@ -1,15 +1,17 @@
-import streamlit as st
-from users import login_page, create_account_page, forgot_password_page
-import openai
 import os
-import make_prompt
+from users import login_page, create_account_page, forgot_password_page
 import json
+import openai
+import make_prompt
+import streamlit as st
 from dotenv import load_dotenv
+import requests
 
 load_dotenv()
 
-openai.api_key = os.getenv("OPENAI_API_KEY")
-
+# Assumons que la clé API de Grok est configurée de manière similaire
+grok_api_key = os.getenv("GROK_API_KEY")
+openai.api_key = grok_api_key
 
 def options(theme_list, mode_list):
     mode = st.sidebar.radio(
@@ -25,16 +27,15 @@ def options(theme_list, mode_list):
     st.sidebar.markdown("<br><br>", unsafe_allow_html=True)
 
     user_keywords = st.sidebar.text_area(
-        "entre ici les mots clé pour orienter le récit", key="user_input"
+        "Entre ici les mots clé pour orienter le récit", key="user_input"
     )
 
     st.sidebar.markdown("<br><br>", unsafe_allow_html=True)
 
     return theme, mode, user_keywords
 
-
 def main_app(users):
-    st.title(f"Bienvenue {st.session_state["username"]}")
+    st.title(f"Bienvenue {st.session_state['username']}")
 
     theme_list = ("Aventure", "Fantastique", "Science-fiction", "Comédie")
     mode_list = ("nouvelle histoire", "histoires enregistrées")
@@ -55,15 +56,33 @@ def main_app(users):
 
 
 def generate_story(theme, user_keywords, users):
+    # Construire le message pour l'API Grok
     messages = make_prompt.make_prompt(
         theme, user_keywords, users[username]["age"], users[username]["sexe"]
     )
-    response = openai.ChatCompletion.create(
-        model="gpt-3.5-turbo", messages=messages, max_tokens=2000, temperature=0.7
-    )
-    generated_story = response.choices[0].message["content"]
-    return generated_story
 
+    # Envoyer la requête à l'API Grok avec la bibliothèque requests
+    response = requests.post(
+        "https://api.x.ai/v1/chat/completions",
+        headers={
+            "Authorization": f"Bearer {grok_api_key}",
+            "Content-Type": "application/json"
+        },
+        json={
+            "model": "grok-beta",
+            "messages": messages,
+            "max_tokens": 2000,
+            "temperature": 0.7
+        }
+    )
+
+    # Vérifier si la requête a réussi
+    if response.status_code == 200:
+        data = response.json()
+        generated_story = data['choices'][0]['message']['content']
+        return generated_story
+    else:
+        raise Exception(f"Erreur lors de l'appel à l'API Grok: {response.status_code}")
 
 def record_story(generated_story, theme, user_keywords, users):
     with open("json/stories.json", "r") as f:
@@ -85,7 +104,6 @@ def record_story(generated_story, theme, user_keywords, users):
     with open("json/users.json", "w") as f:
         json.dump(users, f, indent=4, ensure_ascii=False)
 
-
 if __name__ == "__main__":
 
     if "authenticated" not in st.session_state:
@@ -106,7 +124,7 @@ if __name__ == "__main__":
         )
         if page == "Connexion":
             login_page()
-        # elif page == "Créer un compte":
-        # create_account_page()
+        elif page == "Créer un compte":
+            create_account_page()
         elif page == "Mot de passe oublié":
             forgot_password_page()

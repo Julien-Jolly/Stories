@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+
 def load_users():
     try:
         # file_content = service.files().get_media(fileId=GOOGLE_DRIVE_FILE_ID).execute()
@@ -41,7 +42,12 @@ def create_account(username, password, email, sexe, age):
         return False
 
     # Ajouter le nouvel utilisateur
-    users[username] = {"password": hash(password), "email": hash(email), "sexe": sexe, "age": age}
+    users[username] = {
+        "password": hash(password),
+        "email": hash(email),
+        "sexe": sexe,
+        "age": age,
+    }
     save_users(users)
     return True
 
@@ -62,6 +68,7 @@ def save_users(users):
     except Exception as e:
         st.error(f"Erreur lors de la sauvegarde des utilisateurs : {e}")
         print(f"Erreur lors de la sauvegarde des utilisateurs : {e}")
+
 
 def hash(element):
     return hashlib.sha256(element.encode()).hexdigest()
@@ -96,7 +103,7 @@ def create_account_page():
     username = st.text_input("Nom d'utilisateur")
     password = st.text_input("Mot de passe", type="password")
     email = st.text_input("Email")
-    sexe = st.radio("Tu es",["une fille", "un garçon"])
+    sexe = st.radio("Tu es", ["une fille", "un garçon"])
     age = st.text_input("Quel est ton age ?")
 
     if st.button("Créer le compte"):
@@ -146,7 +153,9 @@ def reinit_code_validation():
 
         if username and verify_reset_code(username, reset_code):
             st.session_state.reset_step = "new_password"
-            st.success("Code validé avec succès. Veuillez entrer un nouveau mot de passe.")
+            st.success(
+                "Code validé avec succès. Veuillez entrer un nouveau mot de passe."
+            )
             st.rerun()
         else:
             st.error("Code de réinitialisation invalide.")
@@ -192,7 +201,7 @@ def send_reinit_mail():
                 body = f"Bonjour {username},\n\nVotre code de réinitialisation est : {reset_code}\n\nCordialement."
 
                 msg = MIMEMultipart()
-                msg['From'] = os.getenv("sender_email")
+                msg["From"] = os.getenv("sender_email")
                 msg["To"] = receiver_email
                 msg["Subject"] = subject
                 msg.attach(MIMEText(body, "plain"))
@@ -217,7 +226,9 @@ def send_reinit_mail():
                 user_found = True
                 st.session_state.reset_email = hash(receiver_email)
                 st.session_state.reset_step = "code"
-                st.success(f"Un code de réinitialisation a été envoyé à {receiver_email}.")
+                st.success(
+                    f"Un code de réinitialisation a été envoyé à {receiver_email}."
+                )
                 st.rerun()
                 break
 
