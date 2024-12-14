@@ -11,7 +11,6 @@ load_dotenv()
 
 # Assumons que la clé API de Grok est configurée de manière similaire
 grok_api_key = os.getenv("GROK_API_KEY")
-openai.api_key = grok_api_key
 
 def options(theme_list, mode_list):
     mode = st.sidebar.radio(
@@ -124,7 +123,7 @@ if __name__ == "__main__":
         )
         if page == "Connexion":
             login_page()
-        elif page == "Créer un compte":
-            create_account_page()
+        # elif page == "Créer un compte":
+        #     create_account_page()
         elif page == "Mot de passe oublié":
             forgot_password_page()
