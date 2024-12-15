@@ -1,5 +1,5 @@
 import streamlit as st
-from users import login_page, create_account_page, forgot_password_page
+from users import login_page, create_account_page, forgot_password_page, load_personnages
 import openai
 import os
 import make_prompt
@@ -11,24 +11,7 @@ load_dotenv()
 
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
-personnages = {
-    "Léa": {
-        "description": "Léa est une fillette espiègle de 10 ans avec de longs cheveux blonds bouclés et des yeux bleu clair pétillants. Elle porte une robe rouge à pois blancs et un serre-tête assorti. Toujours curieuse, elle explore son environnement avec son carnet de croquis, où elle dessine tout ce qu'elle trouve. Elle porte un pendentif en forme de cœur, un porte-bonheur offert par sa grand-mère."
-    },
-    "Noah": {
-        "description": "Noah est un garçon de 9 ans à la peau mate et aux cheveux bruns courts en bataille. Il porte des lunettes rondes et un T-shirt bleu avec un logo de fusée. Passionné de science, il transporte un sac à dos rempli de gadgets qu’il a fabriqués lui-même. Son objet préféré est une montre high-tech qu’il a inventée, qui émet parfois des bruits étranges."
-    },
-    "Emma": {
-        "description": "Emma est une fillette de 8 ans avec des cheveux noirs lisses attachés en deux couettes et de grands yeux marron. Elle porte une salopette jaune et des baskets blanches couvertes de petits autocollants. Pleine d’imagination, elle aime inventer des histoires fantastiques et transporter un petit sac rempli de figurines miniatures qu’elle utilise pour ses jeux de rôle."
-    },
-    "Lucas": {
-        "description": "Lucas est un garçon athlétique de 10 ans avec des cheveux châtain clair et des yeux verts. Il porte un sweat à capuche vert, des pantalons cargo, et une casquette à l’envers. Leader naturel du groupe, il aime grimper aux arbres et collectionne des badges qu’il attache à son sac à dos, représentant ses aventures et défis."
-    },
-    "Liya-Zineb": {
-        "description": "Zouzou est une princesse de 8 ans avec des cheveux chatain ondulés. Elle porte une jupe violette, un T-shirt à motifs étoilés et un bracelet en perles multicolores. Rêveuse et fascinée par les étoiles, elle emporte toujours un télescope portable pour observer les cieux dès qu'elle le peut."
-    },
-}
-
+personnages = load_personnages()
 
 def summarize_paragraph(paragraph, max_length=1000):
     """
@@ -71,18 +54,26 @@ def summarize_paragraph(paragraph, max_length=1000):
 
 def generate_images_with_summaries(paragraphs, style, story_id, personnage):
     """
-    Résume chaque paragraphe, tronque à 1000 caractères si nécessaire,
-    et génère des images via DALL·E 3 en traitant explicitement les `function_call`.
+    Génère des images à partir des paragraphes tout en conservant l'apparence physique du personnage
+    en se basant sur une image source.
     """
     summarized_prompts = []
     for paragraph in paragraphs:
         print("Réduction des paragraphes pour prompt image")
         summarized_prompt = summarize_paragraph(paragraph)
-        # Ajoutez la description du personnage au début de chaque prompt
-        full_prompt = f"{personnage['description']} {summarized_prompt} {style}"
-        summarized_prompts.append(
-            full_prompt[:1000]
-        )  # Tronquer à 1000 caractères si nécessaire
+
+        # Gérer plusieurs personnages
+        if isinstance(personnage, list):
+            personnage_description = " ".join([personnages[p]["description"] for p in personnage])
+        else:
+            personnage_description = personnages[personnage]["description"]
+
+        # Ajouter l'image source au prompt
+        image_reference_path = os.path.join("images_source", f"zouzou.png")
+        image_reference_text = f"Basé sur l'image initiale du personnage située dans {image_reference_path}."
+        full_prompt = f"{image_reference_text} {personnage_description} {summarized_prompt} {style}"
+
+        summarized_prompts.append(full_prompt[:1000])  # Tronquer à 1000 caractères si nécessaire
         print("Réduction des paragraphes pour prompt image... terminé")
 
     image_urls = []
@@ -117,9 +108,7 @@ def generate_images_with_summaries(paragraphs, style, story_id, personnage):
                 function_call={"name": "generate_image"},
             )
             print("Réponse brute de l'API :", response)
-            arguments = json.loads(
-                response.choices[0].message["function_call"]["arguments"]
-            )
+            arguments = json.loads(response.choices[0].message["function_call"]["arguments"])
             prompt = arguments["prompt"]
             size = arguments["size"]
             image_response = openai.Image.create(prompt=prompt, size=size, n=1)
@@ -220,12 +209,12 @@ def main_app(users):
 
     if st.sidebar.button("Lancer"):
         generated_story = generate_story(theme, user_keywords, users, selected_perso)
+        image_paths=""
 
         paragraphs = generated_story.split("\n\n")
         style = f"Illustration pour un livre pour enfants, {style_images}, personnages constants."
-        # image_paths = generate_images_with_summaries(paragraphs, style, len(users[username]["stories"]) + 1, personnage)
-        image_paths = ""
-        # display_story_with_images(generated_story, image_paths)
+        #image_paths = generate_images_with_summaries(paragraphs, style, len(users[username]["stories"]) + 1, selected_perso)
+        display_story_with_images(generated_story, image_paths)
         st.write(generated_story)
         save_story(generated_story, theme, user_keywords, users, image_paths)
 
@@ -345,7 +334,7 @@ if __name__ == "__main__":
         )
         if page == "Connexion":
             login_page()
-        # elif page == "Créer un compte":
-        # create_account_page()
+        #elif page == "Créer un compte":
+            #create_account_page()
         elif page == "Mot de passe oublié":
             forgot_password_page()

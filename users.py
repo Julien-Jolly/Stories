@@ -28,8 +28,9 @@ def load_users():
         return {}
 
 
-def create_account(username, password, email, sexe, age):
+def create_account(username, password, email, sexe, age, description):
     users = load_users()
+    personnages = load_personnages()
 
     # Vérifier si le nom d'utilisateur existe déjà
     if username in users:
@@ -49,6 +50,16 @@ def create_account(username, password, email, sexe, age):
         "age": age,
     }
     save_users(users)
+
+    # Ajouter le personnage correspondant
+    if not isinstance(personnages, dict):
+        personnages = {}  # Initialiser un dictionnaire vide si nécessaire
+
+    personnages[username] = {
+        "description": description
+    }
+    save_personnages(personnages)
+
     return True
 
 
@@ -105,9 +116,10 @@ def create_account_page():
     email = st.text_input("Email")
     sexe = st.radio("Tu es", ["une fille", "un garçon"])
     age = st.text_input("Quel est ton age ?")
+    description = st.text_input("décris toi pour créer ton prersonnage")
 
     if st.button("Créer le compte"):
-        if create_account(username, password, email, sexe, age):
+        if create_account(username, password, email, sexe, age, description):
             st.success(
                 "Compte créé avec succès ! Vous pouvez maintenant vous connecter."
             )
@@ -245,3 +257,21 @@ def reset_user_password(email, new_password):
             save_users(users)
             return True
     return False
+
+def load_personnages():
+    try:
+        with open("json/personnages.json", "r") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return {}  # Si le fichier n'existe pas, retourner un dictionnaire vide
+    except json.JSONDecodeError:
+        st.error("Erreur : Le fichier personnages.json est mal formé.")
+        return {}
+
+def save_personnages(personnages):
+    try:
+        with open("json/personnages.json", "w") as f:
+            json.dump(personnages, f, indent=4, ensure_ascii=False)
+            st.success("Personnages mis à jour.")
+    except Exception as e:
+        st.error(f"Erreur lors de la sauvegarde des personnages : {e}")
