@@ -6,6 +6,7 @@ import make_prompt
 import json
 from dotenv import load_dotenv
 import requests
+import re
 
 load_dotenv()
 
@@ -44,7 +45,6 @@ def summarize_paragraph(paragraph, max_length=1000):
         return summary.strip()
     except Exception as e:
         print(f"Erreur lors du résumé du paragraphe : {e}")
-        # Retourne une version tronquée du paragraphe original en cas d'erreur
         return (
             (paragraph[:max_length] + "...")
             if len(paragraph) > max_length
@@ -62,18 +62,16 @@ def generate_images_with_summaries(paragraphs, style, story_id, personnage):
         print("Réduction des paragraphes pour prompt image")
         summarized_prompt = summarize_paragraph(paragraph)
 
-        # Gérer plusieurs personnages
         if isinstance(personnage, list):
             personnage_description = " ".join([personnages[p]["description"] for p in personnage])
         else:
             personnage_description = personnages[personnage]["description"]
 
-        # Ajouter l'image source au prompt
         image_reference_path = os.path.join("images_source", f"zouzou.png")
         image_reference_text = f"Basé sur l'image initiale du personnage située dans {image_reference_path}."
         full_prompt = f"{image_reference_text} {personnage_description} {summarized_prompt} {style}"
 
-        summarized_prompts.append(full_prompt[:1000])  # Tronquer à 1000 caractères si nécessaire
+        summarized_prompts.append(full_prompt[:1000])
         print("Réduction des paragraphes pour prompt image... terminé")
 
     image_urls = []
@@ -188,6 +186,33 @@ def options(theme_list, mode_list, style_images, personnage_names):
     return theme, mode, user_keywords, style_images, selected_perso
 
 
+def load_stories(username):
+    """
+    Charge et affiche les histoires enregistrées pour un utilisateur donné.
+    """
+    try:
+        with open("json/users.json", "r") as user_file:
+            users = json.load(user_file)
+
+        if username not in users or "stories" not in users[username]:
+            st.warning("Aucune histoire enregistrée pour cet utilisateur.")
+            return
+
+        with open("json/stories.json", "r") as stories_file:
+            all_stories = json.load(stories_file)
+
+        user_story_titles = users[username]["stories"]
+        for story_title in user_story_titles:
+            story = all_stories.get(story_title)
+            if story:
+                with st.expander(story.get("title", "Titre manquant")):
+                    st.write(story.get("story", "Contenu manquant"))
+            else:
+                st.warning(f"Histoire avec le titre '{story_title}' introuvable.")
+    except Exception as e:
+        st.error(f"Erreur lors du chargement des histoires : {e}")
+
+
 def main_app(users):
     st.title(f"Bienvenue {st.session_state['username']}")
 
@@ -200,23 +225,25 @@ def main_app(users):
         "photo non réaliste",
     )
 
-    # Utiliser les clés du dictionnaire des personnages pour le choix utilisateur
     personnage_names = list(personnages.keys())
     theme, mode, user_keywords, style_images, selected_perso = options(
         theme_list, mode_list, style_images, personnage_names
     )
     print(f"selection {selected_perso}")
 
-    if st.sidebar.button("Lancer"):
-        generated_story = generate_story(theme, user_keywords, users, selected_perso)
-        image_paths=""
+    if mode == "nouvelle histoire":
+        if st.sidebar.button("Lancer"):
+            generated_story = generate_story(theme, user_keywords, users, selected_perso)
+            image_paths = ""
 
-        paragraphs = generated_story.split("\n\n")
-        style = f"Illustration pour un livre pour enfants, {style_images}, personnages constants."
-        #image_paths = generate_images_with_summaries(paragraphs, style, len(users[username]["stories"]) + 1, selected_perso)
-        display_story_with_images(generated_story, image_paths)
-        st.write(generated_story)
-        save_story(generated_story, theme, user_keywords, users, image_paths)
+            paragraphs = generated_story.split("\n\n")
+            style = f"Illustration pour un livre pour enfants, {style_images}, personnages constants."
+            display_story_with_images(generated_story, image_paths)
+            st.write(generated_story)
+            save_story(generated_story, theme, user_keywords, users, image_paths)
+
+    elif mode == "histoires enregistrées":
+        load_stories(st.session_state['username'])
 
     if st.sidebar.button("Quitter"):
         st.session_state["authenticated"] = False
@@ -269,26 +296,51 @@ def display_story_with_images(story, image_paths):
             st.write("(Illustration non disponible)")
 
 
-def save_story(generated_story, theme, user_keywords, users, image_paths):
-    with open("json/stories.json", "r") as f:
-        stories = json.load(f)
+def save_story(story, theme, keywords, users, image_paths):
+    """
+    Sauvegarde une histoire dans le fichier JSON avec le titre comme clé.
+    Nettoie le titre pour éviter les caractères non souhaités.
+    """
+    try:
+        # Extraction et nettoyage du titre
+        raw_title = story.split("\n")[0].replace("Titre : ", "").strip()
+        title = re.sub(r'[\\/:"*?<>|]', "", raw_title)  # Enlève les caractères non valides pour un nom de fichier
 
-    new_id = len(stories) + 1
-    stories[new_id] = {
-        "theme": theme,
-        "keywords": user_keywords,
-        "age": users[username]["age"],
-        "sexe": users[username]["sexe"],
-        "story": generated_story,
-        "images": image_paths,  # Associe les chemins des images à l'histoire
-    }
-    with open("json/stories.json", "w") as f:
-        json.dump(stories, f, indent=4, ensure_ascii=False)
-    if "stories" not in users[username]:
-        users[username]["stories"] = []
-    users[username]["stories"].append(new_id)
-    with open("json/users.json", "w") as f:
-        json.dump(users, f, indent=4, ensure_ascii=False)
+        new_story = {
+            "theme": theme,
+            "keywords": keywords,
+            "age": users[st.session_state["username"]].get("age", ""),
+            "sexe": users[st.session_state["username"]].get("sexe", ""),
+            "title": title,
+            "story": story,
+            "images": image_paths,
+        }
+
+        # Charger les histoires existantes
+        with open("json/stories.json", "r") as stories_file:
+            all_stories = json.load(stories_file)
+
+        # Ajouter ou mettre à jour l'histoire
+        all_stories[title] = new_story
+
+        # Sauvegarder les histoires mises à jour
+        with open("json/stories.json", "w") as stories_file:
+            json.dump(all_stories, stories_file, indent=4, ensure_ascii=False)
+
+        # Ajouter le titre de l'histoire à l'utilisateur
+        with open("json/users.json", "r") as user_file:
+            users_data = json.load(user_file)
+
+        if title not in users_data[st.session_state["username"]]["stories"]:
+            users_data[st.session_state["username"]]["stories"].append(title)
+
+        with open("json/users.json", "w") as user_file:
+            json.dump(users_data, user_file, indent=4, ensure_ascii=False)
+
+        st.success(f"Histoire '{title}' sauvegardée avec succès !")
+
+    except Exception as e:
+        st.error(f"Erreur lors de la sauvegarde de l'histoire : {e}")
 
 
 def save_image(image_url, story_id, paragraph_index):
