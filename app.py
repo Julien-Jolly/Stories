@@ -1,18 +1,47 @@
 import streamlit as st
-from users import login_page, create_account_page, forgot_password_page, load_personnages
+from users import (
+    login_page,
+    create_account_page,
+    forgot_password_page,
+)
 import openai
 import os
-import make_prompt
+from make_prompt import make_prompt
 import json
 from dotenv import load_dotenv
-import requests
+import uuid
 import re
+import requests
 
 load_dotenv()
 
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
-personnages = load_personnages()
+
+
+
+
+def load_personnages():
+    try:
+        with open("json/personnages.json", "r") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return {}  # Si le fichier n'existe pas, retourner un dictionnaire vide
+    except json.JSONDecodeError:
+        st.error("Erreur : Le fichier personnages.json est mal formé.")
+        return {}
+
+
+def save_personnages(personnages):
+    try:
+        with open("json/personnages.json", "w") as f:
+            json.dump(personnages, f, indent=4, ensure_ascii=False)
+            st.success("Personnages mis à jour.")
+    except Exception as e:
+        st.error(f"Erreur lors de la sauvegarde des personnages : {e}")
+
+
+
 
 def summarize_paragraph(paragraph, max_length=1000):
     """
@@ -52,99 +81,71 @@ def summarize_paragraph(paragraph, max_length=1000):
         )
 
 
-def generate_images_with_summaries(paragraphs, style, story_id, personnage):
+def save_image(image_url, story_id, paragraph_index):
     """
-    Génère des images à partir des paragraphes tout en conservant l'apparence physique du personnage
-    en se basant sur une image source.
+    Télécharge et enregistre une image à partir de son URL.
+    Les images sont stockées dans le dossier 'images/' avec un nom unique.
     """
-    summarized_prompts = []
-    for paragraph in paragraphs:
-        print("Réduction des paragraphes pour prompt image")
+    images_dir = "images"
+    os.makedirs(images_dir, exist_ok=True)  # Crée le dossier s'il n'existe pas
+
+    # Générer un identifiant unique pour éviter les conflits
+    unique_id = uuid.uuid4().hex
+    image_path = os.path.join(
+        images_dir, f"story_{story_id}_paragraph_{paragraph_index}_{unique_id}.png"
+    )
+
+    try:
+        response = requests.get(image_url)
+        print(f"get image url : {response}")
+        response.raise_for_status()  # Vérifie si la requête a réussi
+        with open(image_path, "wb") as f:
+            f.write(response.content)
+        return image_path
+    except Exception as e:
+        print(f"Erreur lors du téléchargement de l'image : {e}")
+        return None
+
+
+def edit_images_with_dalle(paragraphs, style, story_id, personnage):
+    """
+    Modifie des images existantes en utilisant les paragraphes comme prompts.
+    Utilise une image source comme base et génère une image éditée pour chaque paragraphe.
+    """
+    base_image_path = os.path.join("images_source", "zouzou.png")
+    if not os.path.exists(base_image_path):
+        print(f"Image source introuvable : {base_image_path}")
+        return []
+
+    image_paths = []
+
+    for index, paragraph in enumerate(paragraphs):
         summarized_prompt = summarize_paragraph(paragraph)
 
-        if isinstance(personnage, list):
-            personnage_description = " ".join([personnages[p]["description"] for p in personnage])
-        else:
-            personnage_description = personnages[personnage]["description"]
+        full_prompt = f"{personnage}: {summarized_prompt}. Style: {style}"
+        mask_path = os.path.join("images_source", "mask.png")
 
-        image_reference_path = os.path.join("images_source", f"zouzou.png")
-        image_reference_text = f"Basé sur l'image initiale du personnage située dans {image_reference_path}."
-        full_prompt = f"{image_reference_text} {personnage_description} {summarized_prompt} {style}"
-
-        summarized_prompts.append(full_prompt[:1000])
-        print("Réduction des paragraphes pour prompt image... terminé")
-
-    image_urls = []
-    for summarized_prompt in summarized_prompts:
         try:
-            response = openai.ChatCompletion.create(
-                model="gpt-4",
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "Tu es un assistant expert en génération d'images.",
-                    },
-                    {
-                        "role": "user",
-                        "content": f"Crée une illustration basée sur le texte suivant : {summarized_prompt}",
-                    },
-                ],
-                functions=[
-                    {
-                        "name": "generate_image",
-                        "description": "Génère une image basée sur une description textuelle.",
-                        "parameters": {
-                            "type": "object",
-                            "properties": {
-                                "prompt": {"type": "string"},
-                                "size": {"type": "string", "enum": ["256x256"]},
-                            },
-                            "required": ["prompt", "size"],
-                        },
-                    }
-                ],
-                function_call={"name": "generate_image"},
+            response = openai.Image.create_edit(
+                image=open(base_image_path, "rb"),
+                mask=open(mask_path, "rb"),
+                prompt=full_prompt,
+                n=1,
+                size="1024x1024",
             )
-            print("Réponse brute de l'API :", response)
-            arguments = json.loads(response.choices[0].message["function_call"]["arguments"])
-            prompt = arguments["prompt"]
-            size = arguments["size"]
-            image_response = openai.Image.create(prompt=prompt, size=size, n=1)
-            image_url = image_response["data"][0]["url"]
-            image_urls.append(image_url)
+            image_url = response["data"][0]["url"]
+
+            # Télécharger et enregistrer l'image générée avec un nom unique basé sur l'histoire
+            image_path = save_image(image_url, story_id, index + 1)
+            image_paths.append(image_path)
         except Exception as e:
-            print(f"Erreur lors de la génération de l'image : {e}")
-            image_urls.append(None)
-
-    image_paths = []
-    for index, image_url in enumerate(image_urls):
-        if image_url:
-            image_path = save_image(image_url, story_id, index + 1)
-            image_paths.append(image_path)
-            print(f"Image {index + 1} sauvegardée : {image_path}")
-        else:
+            print(f"Erreur lors de l'édition de l'image : {e}")
             image_paths.append(None)
+
     return image_paths
 
 
-def generate_images_for_paragraphs(paragraphs, style, story_id):
-    """
-    Génère et stocke toutes les images en une seule requête.
-    Retourne une liste des chemins des images locales.
-    """
-    image_urls = generate_images_with_summaries(paragraphs, style)
-    image_paths = []
-
-    for index, image_url in enumerate(image_urls):
-        if image_url:
-            image_path = save_image(image_url, story_id, index + 1)
-            image_paths.append(image_path)
-        else:
-            image_paths.append(None)  # Si une image n'est pas générée
-    return image_paths
-
-
-def options(theme_list, mode_list, style_images, personnage_names):
+def options(theme_list, mode_list, style_images, personnages, personnage_names):
     mode = st.sidebar.radio(
         label="Que souhaites tu lire ?", options=mode_list, key="selected_mode"
     )
@@ -188,7 +189,8 @@ def options(theme_list, mode_list, style_images, personnage_names):
 
 def load_stories(username):
     """
-    Charge et affiche les histoires enregistrées pour un utilisateur donné.
+    Charge et affiche les histoires enregistrées pour un utilisateur donné,
+    en affichant les images associées si elles sont disponibles.
     """
     try:
         with open("json/users.json", "r") as user_file:
@@ -206,7 +208,23 @@ def load_stories(username):
             story = all_stories.get(story_title)
             if story:
                 with st.expander(story.get("title", "Titre manquant")):
-                    st.write(story.get("story", "Contenu manquant"))
+                    story_text = story.get("story", "Contenu manquant")
+                    images = story.get("images", [])
+
+                    paragraphs = story_text.split("\n\n")
+                    for i, paragraph in enumerate(paragraphs):
+                        st.write(paragraph.strip())
+                        if (
+                            i < len(images) and images[i]
+                        ):  # Afficher uniquement si l'image existe
+                            st.image(
+                                images[i],
+                                caption="Illustration",
+                                use_container_width=True,
+                            )
+
+                    if not images:
+                        st.info("(Cette histoire n'a pas d'illustrations associées.)")
             else:
                 st.warning(f"Histoire avec le titre '{story_title}' introuvable.")
     except Exception as e:
@@ -225,25 +243,29 @@ def main_app(users):
         "photo non réaliste",
     )
 
+    personnages = load_personnages()
     personnage_names = list(personnages.keys())
     theme, mode, user_keywords, style_images, selected_perso = options(
-        theme_list, mode_list, style_images, personnage_names
+        theme_list, mode_list, style_images, personnages, personnage_names
     )
     print(f"selection {selected_perso}")
 
     if mode == "nouvelle histoire":
         if st.sidebar.button("Lancer"):
-            generated_story = generate_story(theme, user_keywords, users, selected_perso)
             image_paths = ""
-
+            generated_story = generate_story(
+                theme, user_keywords, users, personnages, selected_perso
+            )
             paragraphs = generated_story.split("\n\n")
             style = f"Illustration pour un livre pour enfants, {style_images}, personnages constants."
-            display_story_with_images(generated_story, image_paths)
-            st.write(generated_story)
+            image_paths = edit_images_with_dalle(
+                paragraphs, style, "story_id_placeholder", selected_perso
+            )
+            display_story_with_images(generated_story, image_paths, paragraphs)
             save_story(generated_story, theme, user_keywords, users, image_paths)
 
     elif mode == "histoires enregistrées":
-        load_stories(st.session_state['username'])
+        load_stories(st.session_state["username"])
 
     if st.sidebar.button("Quitter"):
         st.session_state["authenticated"] = False
@@ -251,12 +273,12 @@ def main_app(users):
         st.rerun()
 
 
-def generate_story(theme, user_keywords, users, selected_perso):
+def generate_story(theme, user_keywords, users, personnages, selected_perso):
     """
     Génère une histoire en appelant l'API OpenAI avec les paramètres.
     """
 
-    messages = make_prompt.make_prompt(
+    messages = make_prompt(
         theme,
         user_keywords,
         users[username]["age"],
@@ -271,29 +293,15 @@ def generate_story(theme, user_keywords, users, selected_perso):
     return generated_story
 
 
-def generate_image(prompt, size="256x256", n=1):
-    try:
-        response = openai.Image.create(prompt=prompt, n=n, size=size)
-        # Récupère l'URL de la première image générée
-        image_url = response["data"][0]["url"]
-        print("Image URL:", image_url)
-        return image_url
-    except Exception as e:
-        print("Erreur lors de la génération de l'image:", e)
-        return None
-
-
-def display_story_with_images(story, image_paths):
+def display_story_with_images(story, image_paths, paragraphs):
     """
     Affiche le texte avec les images correspondantes sous chaque paragraphe.
+    Corrige la répétition de l'histoire en s'assurant qu'elle n'est affichée qu'une fois.
     """
-    paragraphs = story.split("\n\n")
     for paragraph, image_path in zip(paragraphs, image_paths):
-        st.write(paragraph.strip())
-        if image_path:
+        st.write(paragraph.strip())  # Affiche le paragraphe
+        if image_path:  # Si une image est disponible
             st.image(image_path, caption="Illustration", use_container_width=True)
-        else:
-            st.write("(Illustration non disponible)")
 
 
 def save_story(story, theme, keywords, users, image_paths):
@@ -304,7 +312,12 @@ def save_story(story, theme, keywords, users, image_paths):
     try:
         # Extraction et nettoyage du titre
         raw_title = story.split("\n")[0].replace("Titre : ", "").strip()
-        title = re.sub(r'[\\/:"*?<>|]', "", raw_title)  # Enlève les caractères non valides pour un nom de fichier
+        title = re.sub(
+            r'[\\/:"*?<>|]', "", raw_title
+        )  # Enlève les caractères non valides pour un nom de fichier
+
+        # Utiliser un identifiant unique pour la gestion des images
+        story_id = title + "_" + uuid.uuid4().hex
 
         new_story = {
             "theme": theme,
@@ -314,6 +327,7 @@ def save_story(story, theme, keywords, users, image_paths):
             "title": title,
             "story": story,
             "images": image_paths,
+            "story_id": story_id,  # Ajout de l'identifiant unique
         }
 
         # Charger les histoires existantes
@@ -343,29 +357,6 @@ def save_story(story, theme, keywords, users, image_paths):
         st.error(f"Erreur lors de la sauvegarde de l'histoire : {e}")
 
 
-def save_image(image_url, story_id, paragraph_index):
-    """
-    Télécharge et enregistre une image à partir de son URL.
-    Les images sont stockées dans le dossier 'images/' avec un nom unique.
-    """
-    images_dir = "images"
-    os.makedirs(images_dir, exist_ok=True)  # Crée le dossier s'il n'existe pas
-
-    image_path = os.path.join(
-        images_dir, f"story_{story_id}_image_{paragraph_index}.png"
-    )
-
-    try:
-        response = requests.get(image_url)
-        response.raise_for_status()  # Vérifie si la requête a réussi
-        with open(image_path, "wb") as f:
-            f.write(response.content)
-        return image_path
-    except Exception as e:
-        print(f"Erreur lors du téléchargement de l'image : {e}")
-        return None
-
-
 if __name__ == "__main__":
 
     if "authenticated" not in st.session_state:
@@ -386,7 +377,7 @@ if __name__ == "__main__":
         )
         if page == "Connexion":
             login_page()
-        #elif page == "Créer un compte":
-            #create_account_page()
+        elif page == "Créer un compte":
+            create_account_page()
         elif page == "Mot de passe oublié":
             forgot_password_page()

@@ -19,7 +19,7 @@ Critères :
 - Sexe de l'enfant : {sexe}
 
 Donnes le titre au début de l'histoire
-L'histoire ne doit pas être trop proche des contes classiques traditionnels, mais rester compréhensible et adaptée à l'âge indiqué. Intègre les mots-clés.
+Tu peux rappeler la description des peronnages principaux au début de léhistoire mais de façon résumée. L'histoire ne doit pas être trop proche des contes classiques traditionnels, mais rester compréhensible et adaptée à l'âge indiqué. Utilises un vocabulaire riche, l'histoire doit etre positive et respecter les principes moraux universels. Intègre les mots-clés.
 Ne termine pas par “Fin de l’histoire” ni par des crédits d’illustration ou d’auteur. Arrête l’histoire après la dernière phrase, sans ajouter d’autre mention. Et assures toi bien qu'on est proche des 2000 mots (pas moins de 1700)."""
         }
     ]

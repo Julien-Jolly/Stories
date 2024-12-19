@@ -8,6 +8,7 @@ import os
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from dotenv import load_dotenv
+from app import (load_personnages, save_personnages)
 
 load_dotenv()
 
@@ -55,9 +56,7 @@ def create_account(username, password, email, sexe, age, description):
     if not isinstance(personnages, dict):
         personnages = {}  # Initialiser un dictionnaire vide si nécessaire
 
-    personnages[username] = {
-        "description": description
-    }
+    personnages[username] = {"description": description}
     save_personnages(personnages)
 
     return True
@@ -258,20 +257,4 @@ def reset_user_password(email, new_password):
             return True
     return False
 
-def load_personnages():
-    try:
-        with open("json/personnages.json", "r") as f:
-            return json.load(f)
-    except FileNotFoundError:
-        return {}  # Si le fichier n'existe pas, retourner un dictionnaire vide
-    except json.JSONDecodeError:
-        st.error("Erreur : Le fichier personnages.json est mal formé.")
-        return {}
 
-def save_personnages(personnages):
-    try:
-        with open("json/personnages.json", "w") as f:
-            json.dump(personnages, f, indent=4, ensure_ascii=False)
-            st.success("Personnages mis à jour.")
-    except Exception as e:
-        st.error(f"Erreur lors de la sauvegarde des personnages : {e}")
