@@ -4,7 +4,6 @@ from users import (
     create_account_page,
     forgot_password_page,
     load_personnages,
-    save_personnages,
 )
 import openai
 import os
@@ -18,11 +17,6 @@ import requests
 load_dotenv()
 
 openai.api_key = st.secrets["openai"]["OPENAI_API_KEY"]
-
-
-
-
-
 
 
 def summarize_paragraph(paragraph, max_length=1000):
@@ -154,9 +148,10 @@ def options(theme_list, mode_list, style_images, personnages, personnage_names):
 
     st.sidebar.markdown("<br><br>", unsafe_allow_html=True)
 
-    style_images = st.sidebar.selectbox(
-        "Quel style souhaites-tu pour les images ?", style_images, key="selected_style"
-    )
+    # style_images = st.sidebar.selectbox(
+    #     "Quel style souhaites-tu pour les images ?", style_images, key="selected_style"
+    # )
+    style_images=""
 
     st.sidebar.markdown("<br><br>", unsafe_allow_html=True)
 
@@ -240,9 +235,9 @@ def main_app(users):
             )
             paragraphs = generated_story.split("\n\n")
             style = f"Illustration pour un livre pour enfants, {style_images}, personnages constants."
-            image_paths = edit_images_with_dalle(
-                paragraphs, style, "story_id_placeholder", selected_perso
-            )
+            # image_paths = edit_images_with_dalle(
+            #     paragraphs, style, "story_id_placeholder", selected_perso
+            # )
             display_story_with_images(generated_story, image_paths, paragraphs)
             save_story(generated_story, theme, user_keywords, users, image_paths)
 
