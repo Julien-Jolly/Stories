@@ -4,8 +4,7 @@ from users import (
     create_account_page,
     forgot_password_page,
     load_personnages,
-    save_stories,
-    save_file_to_drive,
+    authenticate_google_drive,
 )
 import openai
 import os
@@ -15,6 +14,7 @@ from dotenv import load_dotenv
 import uuid
 import re
 import requests
+from googleapiclient.http import MediaFileUpload
 
 load_dotenv()
 
@@ -168,19 +168,35 @@ def options(theme_list, mode_list, style_images, personnages, personnage_names):
 def load_stories(username):
     """
     Charge et affiche les histoires enregistrées pour un utilisateur donné,
-    en affichant les images associées si elles sont disponibles.
+    en téléchargeant le fichier stories.json depuis Google Drive si nécessaire,
+    et en affichant les images associées si elles sont disponibles.
     """
     try:
+        # Télécharger et charger les données des utilisateurs et des histoires
+        service = authenticate_google_drive()
+
+        # Charger stories_users.json depuis Google Drive
+        users_file_id = st.secrets["google_drive"]["users_file_id"]
+        users_file_content = service.files().get_media(fileId=users_file_id).execute()
+        with open("json/stories_users.json", "wb") as f:
+            f.write(users_file_content)
         with open("json/stories_users.json", "r") as user_file:
             users = json.load(user_file)
 
+        # Vérifier si l'utilisateur a des histoires
         if username not in users or "stories" not in users[username]:
             st.warning("Aucune histoire enregistrée pour cet utilisateur.")
             return
 
+        # Charger stories.json depuis Google Drive
+        stories_file_id = st.secrets["google_drive"]["stories_file_id"]
+        stories_file_content = service.files().get_media(fileId=stories_file_id).execute()
+        with open("json/stories.json", "wb") as f:
+            f.write(stories_file_content)
         with open("json/stories.json", "r") as stories_file:
             all_stories = json.load(stories_file)
 
+        # Récupérer les histoires de l'utilisateur
         user_story_titles = users[username]["stories"]
         for story_title in user_story_titles:
             story = all_stories.get(story_title)
@@ -287,20 +303,17 @@ def display_story_with_images(image_paths, paragraphs):
 
 def save_story(story, theme, keywords, users, image_paths):
     """
-    Sauvegarde une histoire dans le fichier JSON avec le titre comme clé.
-    Nettoie le titre pour éviter les caractères non souhaités.
-    Synchronise les données avec Google Drive.
+    Sauvegarde une histoire dans le fichier JSON avec le titre comme clé et synchronise avec Google Drive.
     """
     try:
         # Extraction et nettoyage du titre
         raw_title = story.split("\n")[0].replace("Titre : ", "").strip()
-        title = re.sub(
-            r'[\\/:"*?<>|]', "", raw_title
-        )  # Enlève les caractères non valides pour un nom de fichier
+        title = re.sub(r'[\\/:"*?<>|]', "", raw_title)  # Supprime les caractères non valides
 
-        # Utiliser un identifiant unique pour la gestion des images
+        # Générer un ID unique pour l'histoire
         story_id = title + "_" + uuid.uuid4().hex
 
+        # Nouvelle histoire
         new_story = {
             "theme": theme,
             "keywords": keywords,
@@ -309,37 +322,26 @@ def save_story(story, theme, keywords, users, image_paths):
             "title": title,
             "story": story,
             "images": image_paths,
-            "story_id": story_id,  # Ajout de l'identifiant unique
+            "story_id": story_id,
         }
 
-        # Charger les histoires existantes depuis Google Drive
+        # Charger les histoires existantes
         stories = load_stories()
 
         # Ajouter ou mettre à jour l'histoire
         stories[title] = new_story
 
-        # Sauvegarder les histoires localement et sur Google Drive
-        save_stories(stories)
+        # Sauvegarde locale
+        with open("json/stories.json", "w") as f:
+            json.dump(stories, f, indent=4, ensure_ascii=False)
 
-        # Charger les données utilisateur existantes depuis Google Drive
-        with open("json/stories_users.json", "r") as user_file:
-            users_data = json.load(user_file)
+        # Mise à jour sur Google Drive
+        service = authenticate_google_drive()
+        file_id = st.secrets["google_drive"]["stories_file_id"]
+        media = MediaFileUpload("json/stories.json", mimetype="application/json")
+        service.files().update(fileId=file_id, media_body=media).execute()
 
-        # Ajouter le titre de l'histoire à l'utilisateur
-        if title not in users_data[st.session_state["username"]]["stories"]:
-            users_data[st.session_state["username"]]["stories"].append(title)
-
-        # Sauvegarder les données utilisateur localement
-        with open("json/stories_users.json", "w") as user_file:
-            json.dump(users_data, user_file, indent=4, ensure_ascii=False)
-
-        # Synchroniser les données utilisateur avec Google Drive
-        save_file_to_drive(
-            st.secrets["google_drive"]["users_file_id"], "json/stories_users.json"
-        )
-
-        st.success(f"Histoire '{title}' sauvegardée avec succès !")
-
+        st.success(f"Histoire '{title}' sauvegardée et synchronisée sur Google Drive.")
     except Exception as e:
         st.error(f"Erreur lors de la sauvegarde de l'histoire : {e}")
 
@@ -351,8 +353,6 @@ if __name__ == "__main__":
         st.session_state["username"] = None
 
     if st.session_state["authenticated"]:
-        load_stories()
-        load_personnages()
         with open("json/stories_users.json", "r") as f:
             users = json.load(f)
         username = st.session_state["username"]
