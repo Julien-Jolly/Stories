@@ -100,7 +100,7 @@ def record_story(generated_story, theme, user_keywords, users):
     if "stories" not in users[username]:
         users[username]["stories"] = []
     users[username]["stories"].append(new_id)
-    with open("json/users.json", "w") as f:
+    with open("json/stories_users.json", "w") as f:
         json.dump(users, f, indent=4, ensure_ascii=False)
 
 if __name__ == "__main__":
@@ -110,7 +110,7 @@ if __name__ == "__main__":
         st.session_state["username"] = None
 
     if st.session_state["authenticated"]:
-        with open("json/users.json", "r") as f:
+        with open("json/stories_users.json", "r") as f:
             users = json.load(f)
         username = st.session_state["username"]
         main_app(users)

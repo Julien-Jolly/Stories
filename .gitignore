@@ -1,9 +1,10 @@
 .env
 venv/
-users.json
+stories_users.json
 .idea/
 __pycache__/
 test.py
 piper/
 images/
 images_source/
+.streamlit/

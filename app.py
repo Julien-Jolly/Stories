@@ -3,6 +3,8 @@ from users import (
     login_page,
     create_account_page,
     forgot_password_page,
+    load_personnages,
+    save_personnages,
 )
 import openai
 import os
@@ -15,30 +17,10 @@ import requests
 
 load_dotenv()
 
-openai.api_key = os.getenv("OPENAI_API_KEY")
+openai.api_key = st.secrets["openai"]["OPENAI_API_KEY"]
 
 
 
-
-
-def load_personnages():
-    try:
-        with open("json/personnages.json", "r") as f:
-            return json.load(f)
-    except FileNotFoundError:
-        return {}  # Si le fichier n'existe pas, retourner un dictionnaire vide
-    except json.JSONDecodeError:
-        st.error("Erreur : Le fichier personnages.json est mal formé.")
-        return {}
-
-
-def save_personnages(personnages):
-    try:
-        with open("json/personnages.json", "w") as f:
-            json.dump(personnages, f, indent=4, ensure_ascii=False)
-            st.success("Personnages mis à jour.")
-    except Exception as e:
-        st.error(f"Erreur lors de la sauvegarde des personnages : {e}")
 
 
 
@@ -193,7 +175,7 @@ def load_stories(username):
     en affichant les images associées si elles sont disponibles.
     """
     try:
-        with open("json/users.json", "r") as user_file:
+        with open("json/stories_users.json", "r") as user_file:
             users = json.load(user_file)
 
         if username not in users or "stories" not in users[username]:
@@ -342,13 +324,13 @@ def save_story(story, theme, keywords, users, image_paths):
             json.dump(all_stories, stories_file, indent=4, ensure_ascii=False)
 
         # Ajouter le titre de l'histoire à l'utilisateur
-        with open("json/users.json", "r") as user_file:
+        with open("json/stories_users.json", "r") as user_file:
             users_data = json.load(user_file)
 
         if title not in users_data[st.session_state["username"]]["stories"]:
             users_data[st.session_state["username"]]["stories"].append(title)
 
-        with open("json/users.json", "w") as user_file:
+        with open("json/stories_users.json", "w") as user_file:
             json.dump(users_data, user_file, indent=4, ensure_ascii=False)
 
         st.success(f"Histoire '{title}' sauvegardée avec succès !")
@@ -364,7 +346,7 @@ if __name__ == "__main__":
         st.session_state["username"] = None
 
     if st.session_state["authenticated"]:
-        with open("json/users.json", "r") as f:
+        with open("json/stories_users.json", "r") as f:
             users = json.load(f)
         username = st.session_state["username"]
         main_app(users)

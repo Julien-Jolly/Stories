@@ -4,23 +4,41 @@ import hashlib
 import smtplib
 import string
 import random
-import os
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from dotenv import load_dotenv
-from app import (load_personnages, save_personnages)
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
+from googleapiclient.http import MediaFileUpload
 
 load_dotenv()
 
+GOOGLE_DRIVE_FILE_ID = st.secrets["google_drive"]["users_file_id"]
+SERVICE_ACCOUNT_INFO = st.secrets["google_credentials"]
+API_NAME = "drive"
+API_VERSION = "v3"
+
+def authenticate_google_drive():
+    try:
+        credentials = service_account.Credentials.from_service_account_info(
+            SERVICE_ACCOUNT_INFO, scopes=["https://www.googleapis.com/auth/drive"]
+        )
+        service = build(API_NAME, API_VERSION, credentials=credentials)
+        return service
+    except HttpError as error:
+        st.error(f"Une erreur s'est produite lors de l'authentification : {error}")
+        st.stop()
 
 def load_users():
+    service = authenticate_google_drive()
     try:
-        # file_content = service.files().get_media(fileId=GOOGLE_DRIVE_FILE_ID).execute()
-        #
-        # with open("json/users.json", "wb") as f:
-        #     f.write(file_content)
+        file_content = service.files().get_media(fileId=GOOGLE_DRIVE_FILE_ID).execute()
 
-        with open("json/users.json", "r") as f:
+        with open("json/stories_users.json", "wb") as f:
+            f.write(file_content)
+
+        with open("json/stories_users.json", "r") as f:
             return json.load(f)
     except FileNotFoundError:
         return {}
@@ -64,17 +82,17 @@ def create_account(username, password, email, sexe, age, description):
 
 def save_users(users):
     try:
-        with open("json/users.json", "w") as f:
+        with open("json/stories_users.json", "w") as f:
             json.dump(users, f, indent=4)
-            st.success("Fichier 'users.json' mis à jour.")
 
-        # service = authenticate_google_drive()
-        # media = MediaFileUpload("json/users.json", mimetype="application/json")
-        #
-        # service.files().get(fileId=GOOGLE_DRIVE_FILE_ID).execute()
-        # service.files().update(fileId=GOOGLE_DRIVE_FILE_ID, media_body=media).execute()
-        #
-        # st.success("Fichier 'users.json' mis à jour sur Google Drive.")
+        service = authenticate_google_drive()
+        media = MediaFileUpload("json/stories_users.json", mimetype="application/json")
+
+        service.files().get(fileId=GOOGLE_DRIVE_FILE_ID).execute()
+        service.files().update(fileId=GOOGLE_DRIVE_FILE_ID, media_body=media).execute()
+
+        st.success("Fichier 'stories_users.json' mis à jour sur Google Drive.")
+
     except Exception as e:
         st.error(f"Erreur lors de la sauvegarde des utilisateurs : {e}")
         print(f"Erreur lors de la sauvegarde des utilisateurs : {e}")
@@ -212,7 +230,7 @@ def send_reinit_mail():
                 body = f"Bonjour {username},\n\nVotre code de réinitialisation est : {reset_code}\n\nCordialement."
 
                 msg = MIMEMultipart()
-                msg["From"] = os.getenv("sender_email")
+                msg["From"] = st.secrets["gmail"]["sender_email"]
                 msg["To"] = receiver_email
                 msg["Subject"] = subject
                 msg.attach(MIMEText(body, "plain"))
@@ -224,11 +242,11 @@ def send_reinit_mail():
                     with smtplib.SMTP(smtp_server, smtp_port) as server:
                         server.starttls()
                         server.login(
-                            os.getenv("sender_email"),
-                            os.getenv("sender_password"),
+                            st.secrets["gmail"]["sender_email"],
+                            st.secrets["gmail"]["sender_password"],
                         )
                         server.sendmail(
-                            os.getenv("sender_email"), receiver_email, msg.as_string()
+                            st.secrets["gmail"]["sender_email"], receiver_email, msg.as_string()
                         )
                         print("E-mail envoyé avec succès.")
                 except smtplib.SMTPException as e:
@@ -257,4 +275,23 @@ def reset_user_password(email, new_password):
             return True
     return False
 
+
+def load_personnages():
+    try:
+        with open("json/personnages.json", "r") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return {}  # Si le fichier n'existe pas, retourner un dictionnaire vide
+    except json.JSONDecodeError:
+        st.error("Erreur : Le fichier personnages.json est mal formé.")
+        return {}
+
+
+def save_personnages(personnages):
+    try:
+        with open("json/personnages.json", "w") as f:
+            json.dump(personnages, f, indent=4, ensure_ascii=False)
+            st.success("Personnages mis à jour.")
+    except Exception as e:
+        st.error(f"Erreur lors de la sauvegarde des personnages : {e}")
 
