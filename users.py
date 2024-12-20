@@ -30,6 +30,35 @@ def authenticate_google_drive():
         st.error(f"Une erreur s'est produite lors de l'authentification : {error}")
         st.stop()
 
+
+def load_file_from_drive(file_id, local_path):
+    """
+    Télécharge un fichier depuis Google Drive et le sauvegarde localement.
+    """
+    service = authenticate_google_drive()
+    try:
+        request = service.files().get_media(fileId=file_id)
+        with open(local_path, "wb") as f:
+            f.write(request.execute())
+        with open(local_path, "r") as f:
+            return json.load(f)
+    except Exception as e:
+        st.error(f"Erreur lors du chargement du fichier {local_path} : {e}")
+        return {}
+
+def load_stories():
+    return load_file_from_drive(
+        st.secrets["google_drive"]["stories_file_id"], "json/stories.json"
+    )
+
+def load_personnages():
+    return load_file_from_drive(
+        st.secrets["google_drive"]["personnages_file_id"], "json/personnages.json"
+    )
+
+
+
+
 def load_users():
     service = authenticate_google_drive()
     try:
@@ -288,10 +317,38 @@ def load_personnages():
 
 
 def save_personnages(personnages):
+    local_path = "json/personnages.json"
     try:
         with open("json/personnages.json", "w") as f:
             json.dump(personnages, f, indent=4, ensure_ascii=False)
+            save_file_to_drive(st.secrets["google_drive"]["personnages_file_id"], local_path)
             st.success("Personnages mis à jour.")
     except Exception as e:
         st.error(f"Erreur lors de la sauvegarde des personnages : {e}")
+
+
+
+
+def save_file_to_drive(file_id, local_path):
+    """
+    Sauvegarde un fichier local sur Google Drive.
+    """
+    service = authenticate_google_drive()
+    try:
+        media = MediaFileUpload(local_path, mimetype="application/json")
+        service.files().update(fileId=file_id, media_body=media).execute()
+        st.success(f"Fichier '{local_path}' mis à jour sur Google Drive.")
+    except Exception as e:
+        st.error(f"Erreur lors de la mise à jour du fichier {local_path} : {e}")
+
+def save_stories(stories):
+    """
+    Sauvegarde les histoires localement et sur Google Drive.
+    """
+    local_path = "json/stories.json"
+    with open(local_path, "w") as f:
+        json.dump(stories, f, indent=4, ensure_ascii=False)
+    save_file_to_drive(st.secrets["google_drive"]["stories_file_id"], local_path)
+
+
 
