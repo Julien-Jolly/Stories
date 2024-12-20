@@ -60,7 +60,7 @@ def summarize_paragraph(paragraph, max_length=1000):
 def save_image(image_url, story_id, paragraph_index):
     """
     Télécharge et enregistre une image à partir de son URL.
-    Les images sont stockées dans le dossier 'images/' avec un nom unique.
+    Renvoie un chemin par défaut si l'image ne peut pas être téléchargée.
     """
     images_dir = "images"
     os.makedirs(images_dir, exist_ok=True)  # Crée le dossier s'il n'existe pas
@@ -73,14 +73,13 @@ def save_image(image_url, story_id, paragraph_index):
 
     try:
         response = requests.get(image_url)
-        print(f"get image url : {response}")
         response.raise_for_status()  # Vérifie si la requête a réussi
         with open(image_path, "wb") as f:
             f.write(response.content)
         return image_path
     except Exception as e:
         print(f"Erreur lors du téléchargement de l'image : {e}")
-        return None
+        return None  # Renvoie None si une erreur survient
 
 
 def edit_images_with_dalle(paragraphs, style, story_id, personnage):
@@ -191,14 +190,17 @@ def load_stories(username):
                     paragraphs = story_text.split("\n\n")
                     for i, paragraph in enumerate(paragraphs):
                         st.write(paragraph.strip())
-                        if (
-                            i < len(images) and images[i]
-                        ):  # Afficher uniquement si l'image existe
-                            st.image(
-                                images[i],
-                                caption="Illustration",
-                                use_container_width=True,
-                            )
+
+                        # Vérification si l'image existe
+                        if i < len(images) and images[i]:
+                            if os.path.exists(images[i]):
+                                st.image(
+                                    images[i],
+                                    caption="Illustration",
+                                    use_container_width=True,
+                                )
+                            else:
+                                st.info("(Image manquante pour ce paragraphe.)")
 
                     if not images:
                         st.info("(Cette histoire n'a pas d'illustrations associées.)")
@@ -238,7 +240,7 @@ def main_app(users):
             # image_paths = edit_images_with_dalle(
             #     paragraphs, style, "story_id_placeholder", selected_perso
             # )
-            display_story_with_images(generated_story, image_paths, paragraphs)
+            display_story_with_images(image_paths, paragraphs)
             save_story(generated_story, theme, user_keywords, users, image_paths)
 
     elif mode == "histoires enregistrées":
@@ -270,7 +272,7 @@ def generate_story(theme, user_keywords, users, personnages, selected_perso):
     return generated_story
 
 
-def display_story_with_images(story, image_paths, paragraphs):
+def display_story_with_images(image_paths, paragraphs):
     """
     Affiche le texte avec les images correspondantes sous chaque paragraphe.
     Corrige la répétition de l'histoire en s'assurant qu'elle n'est affichée qu'une fois.
