@@ -10,7 +10,6 @@ import openai
 import os
 from make_prompt import make_prompt
 import json
-from dotenv import load_dotenv
 import uuid
 import re
 import requests
