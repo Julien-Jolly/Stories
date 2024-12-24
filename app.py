@@ -4,7 +4,7 @@ from users import (
     create_account_page,
     forgot_password_page,
     load_jsons,
-    authenticate_google_drive,
+    save_json_to_s3,
 )
 import openai
 import os
@@ -14,9 +14,6 @@ from dotenv import load_dotenv
 import uuid
 import re
 import requests
-from googleapiclient.http import MediaFileUpload
-
-load_dotenv()
 
 openai.api_key = st.secrets["openai"]["OPENAI_API_KEY"]
 
@@ -203,7 +200,8 @@ def load_stories(users, user, stories):
                                     use_container_width=True,
                                 )
                             else:
-                                st.info("(Image non disponible pour ce paragraphe.)")
+                                #st.info("(Image non disponible pour ce paragraphe.)")
+                                return
 
                     if not images:
                         st.info("(Cette histoire n'a pas d'illustrations associées.)")
@@ -331,13 +329,25 @@ def save_story(story, theme, keywords, users, image_paths):
         with open("json/stories.json", "w") as f:
             json.dump(stories, f, indent=4, ensure_ascii=False)
 
-        # Mise à jour sur Google Drive
-        service = authenticate_google_drive()
-        file_id = st.secrets["google_drive"]["stories_file_id"]
-        media = MediaFileUpload("json/stories.json", mimetype="application/json")
-        service.files().update(fileId=file_id, media_body=media).execute()
+        try:
+            with open("json/stories_users.json", "r") as f:
+                stories_users = json.load(f)
+        except FileNotFoundError:
+            stories_users = {}
 
-        # L'histoire reste affichée sans message de succès
+        if st.session_state["username"] not in stories_users:
+            stories_users[st.session_state["username"]] = []
+
+        if title not in stories_users[st.session_state["username"]]:
+            stories_users[st.session_state["username"]].append(title)
+
+        with open("json/stories_users.json", "w") as f:
+            json.dump(stories_users, f, indent=4, ensure_ascii=False)
+
+        # Mise à jour sur AWS
+        save_json_to_s3(stories, "my-bucket-name", "stories.json")
+        save_json_to_s3(stories_users, "my-bucket-name", "stories_users.json")
+
     except Exception as e:
         st.error(f"Erreur lors de la sauvegarde de l'histoire : {e}")
 

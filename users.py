@@ -4,54 +4,38 @@ import hashlib
 import smtplib
 import string
 import random
+import boto3
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from dotenv import load_dotenv
-from google.oauth2 import service_account
-from googleapiclient.discovery import build
-from googleapiclient.errors import HttpError
-from googleapiclient.http import MediaFileUpload
-
-load_dotenv()
-
-GOOGLE_DRIVE_FILE_ID = st.secrets["google_drive"]["users_file_id"]
-SERVICE_ACCOUNT_INFO = st.secrets["google_credentials"]
-API_NAME = "drive"
-API_VERSION = "v3"
 
 
-def authenticate_google_drive():
-    try:
-        credentials = service_account.Credentials.from_service_account_info(
-            SERVICE_ACCOUNT_INFO, scopes=["https://www.googleapis.com/auth/drive"]
-        )
-        service = build(API_NAME, API_VERSION, credentials=credentials)
-        return service
-    except HttpError as error:
-        st.error(f"Une erreur s'est produite lors de l'authentification : {error}")
-        st.stop()
+s3 = boto3.client(
+    's3',
+    aws_access_key_id=st.secrets["AWS"]["YOUR_ACCESS_KEY"],
+    aws_secret_access_key=st.secrets["AWS"]["YOUR_SECRET_KEY"],
+    region_name='us-east-1'
+)
 
 
-def load_users():
-    service = authenticate_google_drive()
-    try:
-        file_content = service.files().get_media(fileId=GOOGLE_DRIVE_FILE_ID).execute()
+def load_json_from_s3(bucket_name, object_key):
+    response = s3.get_object(Bucket=bucket_name, Key=object_key)
+    content = response['Body'].read().decode('utf-8')
+    return json.loads(content)
 
-        with open("json/stories_users.json", "wb") as f:
-            f.write(file_content)
 
-        with open("json/stories_users.json", "r") as f:
-            return json.load(f)
-    except FileNotFoundError:
-        return {}
-    except Exception as e:
-        st.error(f"Erreur lors du chargement des utilisateurs : {e}")
-        return {}
+def save_json_to_s3(data, bucket_name, object_key):
+    s3.put_object(
+        Bucket=bucket_name,
+        Key=object_key,
+        Body=json.dumps(data, indent=4).encode('utf-8')
+    )
+    print(f"Sauvegardé : s3://{bucket_name}/{object_key}")
+
 
 
 def create_account(username, password, email, sexe, age, description):
-    users = load_users()
-    personnages = load_personnages()
+    users = st.session_state["users"]
+    personnages = st.session_state["personnages"]
 
     # Vérifier si le nom d'utilisateur existe déjà
     if username in users:
@@ -84,16 +68,9 @@ def create_account(username, password, email, sexe, age, description):
 
 def save_users(users):
     try:
-        with open("json/stories_users.json", "w") as f:
-            json.dump(users, f, indent=4)
+        save_json_to_s3(users, "jujul", "stories_users.json")
 
-        service = authenticate_google_drive()
-        media = MediaFileUpload("json/stories_users.json", mimetype="application/json")
-
-        service.files().get(fileId=GOOGLE_DRIVE_FILE_ID).execute()
-        service.files().update(fileId=GOOGLE_DRIVE_FILE_ID, media_body=media).execute()
-
-        st.success("Fichier 'stories_users.json' mis à jour sur Google Drive.")
+        st.success("Fichier 'stories_users.json' mis à jour sur AWS.")
 
     except Exception as e:
         st.error(f"Erreur lors de la sauvegarde des utilisateurs : {e}")
@@ -105,7 +82,7 @@ def hash(element):
 
 
 def verify_password(username, password):
-    users = load_users()
+    users = st.session_state["users"]
     if username in users and users[username]["password"] == hash(password):
         return True
     return False
@@ -164,7 +141,7 @@ def forgot_password_page():
 
 
 def verify_reset_code(username, reset_code):
-    users = load_users()
+    users = st.session_state["users"]
     if username in users and users[username].get("reset_code") == reset_code:
         return True
     return False
@@ -173,7 +150,7 @@ def verify_reset_code(username, reset_code):
 def reinit_code_validation():
     reset_code = st.text_input("Entrez le code de réinitialisation envoyé par email")
     if st.button("Valider le code"):
-        users = load_users()
+        users = st.session_state["users"]
         username = None
         for user, data in users.items():
             if data["email"] == st.session_state.reset_email:
@@ -215,13 +192,13 @@ def generate_reset_code():
 def send_reinit_mail():
     receiver_email = st.text_input("Entrez votre email")
     if st.button("Envoyer un code de réinitialisation"):
-        users = load_users()
+        users = st.session_state["users"]
         user_found = False
 
         for username, user_data in users.items():
             if hash(receiver_email) == users[username]["email"]:
                 reset_code = generate_reset_code()
-                users = load_users()
+                users = st.session_state["users"]
                 if username in users:
                     users[username]["reset_code"] = reset_code
                     save_users(users)
@@ -263,14 +240,13 @@ def send_reinit_mail():
                     f"Un code de réinitialisation a été envoyé à {receiver_email}."
                 )
                 st.rerun()
-                break
 
         if not user_found:
             st.error("Aucun utilisateur trouvé avec cet email.")
 
 
 def reset_user_password(email, new_password):
-    users = load_users()
+    users = st.session_state["users"]
     for username, user_data in users.items():
         if user_data["email"] == email:
             hashed_password = hash(new_password)
@@ -281,63 +257,31 @@ def reset_user_password(email, new_password):
 
 
 def load_jsons():
-    """
-    Charge le fichier personnages.json depuis Google Drive, le sauvegarde localement et retourne son contenu.
-    """
-    try:
-        service = authenticate_google_drive()
-        file_id = st.secrets["google_drive"]["personnages_file_id"]
-        users_file_id = st.secrets["google_drive"]["users_file_id"]
-        stories_file_id = st.secrets["google_drive"]["stories_file_id"]
+    # Télécharger les fichiers JSON depuis AWS S3
+    personnages_content = load_json_from_s3("jujul", "personnages.json")
+    users_file_content = load_json_from_s3("jujul", "stories_users.json")
+    stories_file_content = load_json_from_s3("jujul", "stories.json")
 
-        # Télécharger le fichier depuis Google Drive
-        file_content = service.files().get_media(fileId=file_id).execute()
-        users_file_content = service.files().get_media(fileId=users_file_id).execute()
-        stories_file_content = (
-            service.files().get_media(fileId=stories_file_id).execute()
-        )
+    with open("json/personnages.json", "w") as f:
+        json.dump(personnages_content, f, indent=4)
 
-        # Sauvegarde locale
-        with open("json/personnages.json", "wb") as f:
-            f.write(file_content)
+    with open("json/stories_users.json", "w") as f:
+        json.dump(users_file_content, f, indent=4)
 
-        # Charger et retourner les personnages
-        with open("json/personnages.json", "r") as personnages:
-            personnages = json.load(personnages)
+    with open("json/stories.json", "w") as f:
+        json.dump(stories_file_content, f, indent=4)
 
-        with open("json/stories_users.json", "wb") as f:
-            f.write(users_file_content)
-        with open("json/stories_users.json", "r") as user_file:
-            users = json.load(user_file)
-
-        with open("json/stories.json", "wb") as f:
-            f.write(stories_file_content)
-        with open("json/stories.json", "r") as stories_file:
-            all_stories = json.load(stories_file)
-
-        return personnages, users, all_stories
-
-    except FileNotFoundError:
-        return {}  # Si le fichier n'existe pas, retourner un dictionnaire vide
-    except Exception as e:
-        st.error(f"Erreur lors du chargement des personnages : {e}")
-        return {}
+    return personnages_content, users_file_content, stories_file_content
 
 
 def save_personnages(personnages):
-    """
-    Sauvegarde les personnages localement et met à jour Google Drive.
-    """
     try:
         # Sauvegarde locale
         with open("json/personnages.json", "w") as f:
             json.dump(personnages, f, indent=4, ensure_ascii=False)
 
-        # Mise à jour sur Google Drive
-        service = authenticate_google_drive()
-        file_id = st.secrets["google_drive"]["personnages_file_id"]
-        media = MediaFileUpload("json/personnages.json", mimetype="application/json")
-        service.files().update(fileId=file_id, media_body=media).execute()
+        # Mise à jour sur AWS
+        save_json_to_s3(personnages, "my-bucket-name", "stories.json")
 
         st.success("Personnages mis à jour sur Google Drive.")
     except Exception as e:
