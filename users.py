@@ -19,6 +19,7 @@ SERVICE_ACCOUNT_INFO = st.secrets["google_credentials"]
 API_NAME = "drive"
 API_VERSION = "v3"
 
+
 def authenticate_google_drive():
     try:
         credentials = service_account.Credentials.from_service_account_info(
@@ -247,7 +248,9 @@ def send_reinit_mail():
                             st.secrets["gmail"]["sender_password"],
                         )
                         server.sendmail(
-                            st.secrets["gmail"]["sender_email"], receiver_email, msg.as_string()
+                            st.secrets["gmail"]["sender_email"],
+                            receiver_email,
+                            msg.as_string(),
                         )
                         print("E-mail envoyé avec succès.")
                 except smtplib.SMTPException as e:
@@ -277,24 +280,42 @@ def reset_user_password(email, new_password):
     return False
 
 
-def load_personnages():
+def load_jsons():
     """
     Charge le fichier personnages.json depuis Google Drive, le sauvegarde localement et retourne son contenu.
     """
     try:
         service = authenticate_google_drive()
         file_id = st.secrets["google_drive"]["personnages_file_id"]
+        users_file_id = st.secrets["google_drive"]["users_file_id"]
+        stories_file_id = st.secrets["google_drive"]["stories_file_id"]
 
         # Télécharger le fichier depuis Google Drive
         file_content = service.files().get_media(fileId=file_id).execute()
+        users_file_content = service.files().get_media(fileId=users_file_id).execute()
+        stories_file_content = (
+            service.files().get_media(fileId=stories_file_id).execute()
+        )
 
         # Sauvegarde locale
         with open("json/personnages.json", "wb") as f:
             f.write(file_content)
 
         # Charger et retourner les personnages
-        with open("json/personnages.json", "r") as f:
-            return json.load(f)
+        with open("json/personnages.json", "r") as personnages:
+            personnages = json.load(personnages)
+
+        with open("json/stories_users.json", "wb") as f:
+            f.write(users_file_content)
+        with open("json/stories_users.json", "r") as user_file:
+            users = json.load(user_file)
+
+        with open("json/stories.json", "wb") as f:
+            f.write(stories_file_content)
+        with open("json/stories.json", "r") as stories_file:
+            all_stories = json.load(stories_file)
+
+        return personnages, users, all_stories
 
     except FileNotFoundError:
         return {}  # Si le fichier n'existe pas, retourner un dictionnaire vide
@@ -321,4 +342,3 @@ def save_personnages(personnages):
         st.success("Personnages mis à jour sur Google Drive.")
     except Exception as e:
         st.error(f"Erreur lors de la sauvegarde des personnages : {e}")
-

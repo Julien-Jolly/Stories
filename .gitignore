@@ -1,6 +1,6 @@
 .env
-venv/
-stories_users.json
+.venv/
+json/
 .idea/
 __pycache__/
 test.py

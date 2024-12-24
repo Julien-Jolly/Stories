@@ -19,5 +19,8 @@
     },
     "sofia": {
         "description": "sofia est l'amie de zouzou, elles sont dans la meme école, elle est très gentille et a de jolis cheveux bouclés, elle aime dessiner et faire du roller"
+    },
+    "Blanche neige": {
+        "description": "Blanche-Neige est une jeune fille d'une beauté remarquable, avec des cheveux noirs comme l'ébène, une peau blanche comme la neige, et des lèvres rouges comme le sang. Sa grâce naturelle et son apparence délicate reflètent sa douceur intérieure. D'une grande bienveillance, elle incarne la pureté et l'innocence, toujours prête à apporter joie et réconfort autour d'elle. Son charme intemporel et sa bonté sincère la distinguent, faisant d'elle une figure d'une rare élégance et d'une profonde gentillesse."
     }
 }

@@ -3,7 +3,7 @@ from users import (
     login_page,
     create_account_page,
     forgot_password_page,
-    load_personnages,
+    load_jsons,
     authenticate_google_drive,
 )
 import openai
@@ -20,6 +20,12 @@ load_dotenv()
 
 openai.api_key = st.secrets["openai"]["OPENAI_API_KEY"]
 
+(
+    st.session_state["personnages"],
+    st.session_state["users"],
+    st.session_state["all_stories"],
+) = load_jsons()
+
 
 def summarize_paragraph(paragraph, max_length=1000):
     """
@@ -29,7 +35,7 @@ def summarize_paragraph(paragraph, max_length=1000):
     try:
         print("réduction paragraphes pour prompt image")
         response = openai.ChatCompletion.create(
-            model="gpt-4",
+            model="gpt-3.5",
             messages=[
                 {
                     "role": "system",
@@ -108,7 +114,7 @@ def edit_images_with_dalle(paragraphs, style, story_id, personnage):
                 mask=open(mask_path, "rb"),
                 prompt=full_prompt,
                 n=1,
-                size="1024x1024",
+                size="256x256",
             )
             image_url = response["data"][0]["url"]
 
@@ -152,7 +158,7 @@ def options(theme_list, mode_list, style_images, personnages, personnage_names):
     # style_images = st.sidebar.selectbox(
     #     "Quel style souhaites-tu pour les images ?", style_images, key="selected_style"
     # )
-    style_images=""
+    style_images = ""
 
     st.sidebar.markdown("<br><br>", unsafe_allow_html=True)
 
@@ -165,41 +171,21 @@ def options(theme_list, mode_list, style_images, personnages, personnage_names):
     return theme, mode, user_keywords, style_images, selected_perso
 
 
-def load_stories(username):
+def load_stories(users, user, stories):
     """
-    Charge et affiche les histoires enregistrées pour un utilisateur donné,
-    en téléchargeant le fichier stories.json depuis Google Drive si nécessaire,
-    et en affichant les images associées si elles sont disponibles.
+    Charge et affiche les histoires enregistrées pour un utilisateur donné (si username est fourni),
+    ou retourne toutes les histoires si aucun username n'est spécifié.
+    En téléchargeant le fichier stories.json depuis Google Drive si nécessaire.
     """
     try:
-        # Télécharger et charger les données des utilisateurs et des histoires
-        service = authenticate_google_drive()
 
-        # Charger stories_users.json depuis Google Drive
-        users_file_id = st.secrets["google_drive"]["users_file_id"]
-        users_file_content = service.files().get_media(fileId=users_file_id).execute()
-        with open("json/stories_users.json", "wb") as f:
-            f.write(users_file_content)
-        with open("json/stories_users.json", "r") as user_file:
-            users = json.load(user_file)
-
-        # Vérifier si l'utilisateur a des histoires
-        if username not in users or "stories" not in users[username]:
+        if user not in users or "stories" not in users[username]:
             st.warning("Aucune histoire enregistrée pour cet utilisateur.")
             return
 
-        # Charger stories.json depuis Google Drive
-        stories_file_id = st.secrets["google_drive"]["stories_file_id"]
-        stories_file_content = service.files().get_media(fileId=stories_file_id).execute()
-        with open("json/stories.json", "wb") as f:
-            f.write(stories_file_content)
-        with open("json/stories.json", "r") as stories_file:
-            all_stories = json.load(stories_file)
-
-        # Récupérer les histoires de l'utilisateur
         user_story_titles = users[username]["stories"]
         for story_title in user_story_titles:
-            story = all_stories.get(story_title)
+            story = stories.get(story_title)
             if story:
                 with st.expander(story.get("title", "Titre manquant")):
                     story_text = story.get("story", "Contenu manquant")
@@ -209,7 +195,6 @@ def load_stories(username):
                     for i, paragraph in enumerate(paragraphs):
                         st.write(paragraph.strip())
 
-                        # Vérification si l'image existe
                         if i < len(images) and images[i]:
                             if os.path.exists(images[i]):
                                 st.image(
@@ -224,11 +209,13 @@ def load_stories(username):
                         st.info("(Cette histoire n'a pas d'illustrations associées.)")
             else:
                 st.warning(f"Histoire avec le titre '{story_title}' introuvable.")
+
     except Exception as e:
         st.error(f"Erreur lors du chargement des histoires : {e}")
+        return {}
 
 
-def main_app(users):
+def main_app(users, personnages):
     st.title(f"Bienvenue {st.session_state['username']}")
 
     theme_list = ("Aventure", "Fantastique", "Science-fiction", "Comédie")
@@ -240,7 +227,6 @@ def main_app(users):
         "photo non réaliste",
     )
 
-    personnages = load_personnages()
     personnage_names = list(personnages.keys())
     theme, mode, user_keywords, style_images, selected_perso = options(
         theme_list, mode_list, style_images, personnages, personnage_names
@@ -249,11 +235,14 @@ def main_app(users):
 
     if mode == "nouvelle histoire":
         if st.sidebar.button("Lancer"):
-            image_paths = ""
+            image_paths = []
             generated_story = generate_story(
                 theme, user_keywords, users, personnages, selected_perso
             )
             paragraphs = generated_story.split("\n\n")
+            if not paragraphs:
+                st.error("L'histoire générée est vide.")
+                return
             style = f"Illustration pour un livre pour enfants, {style_images}, personnages constants."
             # image_paths = edit_images_with_dalle(
             #     paragraphs, style, "story_id_placeholder", selected_perso
@@ -262,7 +251,11 @@ def main_app(users):
             save_story(generated_story, theme, user_keywords, users, image_paths)
 
     elif mode == "histoires enregistrées":
-        load_stories(st.session_state["username"])
+        load_stories(
+            st.session_state["users"],
+            st.session_state["username"],
+            st.session_state["all_stories"],
+        )
 
     if st.sidebar.button("Quitter"):
         st.session_state["authenticated"] = False
@@ -293,12 +286,13 @@ def generate_story(theme, user_keywords, users, personnages, selected_perso):
 def display_story_with_images(image_paths, paragraphs):
     """
     Affiche le texte avec les images correspondantes sous chaque paragraphe.
-    Corrige la répétition de l'histoire en s'assurant qu'elle n'est affichée qu'une fois.
     """
-    for paragraph, image_path in zip(paragraphs, image_paths):
+    for i, paragraph in enumerate(paragraphs):
         st.write(paragraph.strip())  # Affiche le paragraphe
-        if image_path:  # Si une image est disponible
-            st.image(image_path, caption="Illustration", use_container_width=True)
+        if (
+            image_paths and i < len(image_paths) and image_paths[i]
+        ):  # Vérifie si une image est disponible
+            st.image(image_paths[i], caption="Illustration", use_container_width=True)
 
 
 def save_story(story, theme, keywords, users, image_paths):
@@ -308,7 +302,9 @@ def save_story(story, theme, keywords, users, image_paths):
     try:
         # Extraction et nettoyage du titre
         raw_title = story.split("\n")[0].replace("Titre : ", "").strip()
-        title = re.sub(r'[\\/:"*?<>|]', "", raw_title)  # Supprime les caractères non valides
+        title = re.sub(
+            r'[\\/:"*?<>|]', "", raw_title
+        )  # Supprime les caractères non valides
 
         # Générer un ID unique pour l'histoire
         story_id = title + "_" + uuid.uuid4().hex
@@ -325,8 +321,8 @@ def save_story(story, theme, keywords, users, image_paths):
             "story_id": story_id,
         }
 
-        # Charger les histoires existantes
-        stories = load_stories()
+        # Charger toutes les histoires
+        stories = st.session_state["all_stories"]
 
         # Ajouter ou mettre à jour l'histoire
         stories[title] = new_story
@@ -341,7 +337,7 @@ def save_story(story, theme, keywords, users, image_paths):
         media = MediaFileUpload("json/stories.json", mimetype="application/json")
         service.files().update(fileId=file_id, media_body=media).execute()
 
-        st.success(f"Histoire '{title}' sauvegardée et synchronisée sur Google Drive.")
+        # L'histoire reste affichée sans message de succès
     except Exception as e:
         st.error(f"Erreur lors de la sauvegarde de l'histoire : {e}")
 
@@ -353,10 +349,8 @@ if __name__ == "__main__":
         st.session_state["username"] = None
 
     if st.session_state["authenticated"]:
-        with open("json/stories_users.json", "r") as f:
-            users = json.load(f)
         username = st.session_state["username"]
-        main_app(users)
+        main_app(st.session_state["users"], st.session_state["personnages"])
 
     else:
         st.sidebar.title("Navigation")
