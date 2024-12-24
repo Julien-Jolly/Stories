@@ -93,7 +93,7 @@ requests==2.32.3
 requests-oauthlib==2.0.0
 rich==13.9.4
 rpds-py==0.22.3
-rsa==4.9
+rsa<4.8
 s3transfer==0.10.4
 setuptools==75.6.0
 six==1.17.0
