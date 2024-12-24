@@ -5,6 +5,7 @@ import smtplib
 import string
 import random
 import boto3
+import os
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
@@ -256,11 +257,22 @@ def reset_user_password(email, new_password):
     return False
 
 
+def ensure_json_exists(item):
+    os.makedirs("json", exist_ok=True)  # Crée le dossier s'il n'existe pas
+    if not os.path.exists(f"json/{item}.json"):
+        with open(f"json/{item}.json", "w") as f:
+            f.write("{}")
+
+
 def load_jsons():
     # Télécharger les fichiers JSON depuis AWS S3
     personnages_content = load_json_from_s3("jujul", "personnages.json")
     users_file_content = load_json_from_s3("jujul", "stories_users.json")
     stories_file_content = load_json_from_s3("jujul", "stories.json")
+
+    ensure_json_exists("personnages")
+    ensure_json_exists("stories_users")
+    ensure_json_exists("stories")
 
     with open("json/personnages.json", "w") as f:
         json.dump(personnages_content, f, indent=4)
