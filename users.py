@@ -24,28 +24,26 @@ def load_json_from_s3(bucket_name, object_key):
     return json.loads(content)
 
 
-def save_json_to_s3(data, bucket_name, object_key):
-    s3.put_object(
-        Bucket=bucket_name,
-        Key=object_key,
-        Body=json.dumps(data, indent=4).encode('utf-8')
-    )
-    print(f"Sauvegardé : s3://{bucket_name}/{object_key}")
+def save_json_to_s3(file_path, bucket_name, s3_key):
+    s3.upload_file(file_path, bucket_name, s3_key)
+    print(f"Sauvegardé : s3://{bucket_name}/{s3_key}")
 
 
 
-def create_account(username, password, email, sexe, age, description):
+def create_account(username, password, email, sexe, age, description=None):
     users = st.session_state["users"]
     personnages = st.session_state["personnages"]
 
     # Vérifier si le nom d'utilisateur existe déjà
     if username in users:
         print("Le nom d'utilisateur est déjà utilisé.")
+        st.error("Un compte avec ce nom d'utilisateur existe déjà.")
         return False
 
     # Vérifier si l'email est déjà utilisé
     if any(user_data["email"] == hash(email) for user_data in users.values()):
         print("L'email est déjà utilisé.")
+        st.error("Un compte avec cet email existe déjà.")
         return False
 
     # Ajouter le nouvel utilisateur
@@ -58,20 +56,24 @@ def create_account(username, password, email, sexe, age, description):
     save_users(users)
 
     # Ajouter le personnage correspondant
-    if not isinstance(personnages, dict):
-        personnages = {}  # Initialiser un dictionnaire vide si nécessaire
+    if st.session_state["creer_perso"] == "oui":
+        if not isinstance(personnages, dict):
+            personnages = {}  # Initialiser un dictionnaire vide si nécessaire
 
-    personnages[username] = {"description": description}
-    save_personnages(personnages)
+        personnages[username] = {"description": description}
+        save_personnages(personnages)
 
     return True
 
 
 def save_users(users):
     try:
-        save_json_to_s3(users, "jujul", "stories_users.json")
+        with open("json/stories_users.json", "w") as f:
+            json.dump(users, f, indent=4)
 
-        st.success("Fichier 'stories_users.json' mis à jour sur AWS.")
+        save_json_to_s3("json/stories_users.json", "jujul", "stories_users.json")
+
+        st.success("Fichier 'stories_users.json' mis à jour en local et sur AWS.")
 
     except Exception as e:
         st.error(f"Erreur lors de la sauvegarde des utilisateurs : {e}")
@@ -113,7 +115,11 @@ def create_account_page():
     email = st.text_input("Email")
     sexe = st.radio("Tu es", ["une fille", "un garçon"])
     age = st.text_input("Quel est ton age ?")
-    description = st.text_input("décris toi pour créer ton prersonnage")
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.session_state["creer_perso"] = st.radio("créer un personnage", ["oui", "non"])
+    if st.session_state["creer_perso"]=="oui":
+        description = st.text_input("décris toi pour créer ton prersonnage")
 
     if st.button("Créer le compte"):
         if create_account(username, password, email, sexe, age, description):
@@ -293,7 +299,7 @@ def save_personnages(personnages):
             json.dump(personnages, f, indent=4, ensure_ascii=False)
 
         # Mise à jour sur AWS
-        save_json_to_s3(personnages, "my-bucket-name", "stories.json")
+        save_json_to_s3("json/personnages.json", "jujul", "personnages.json")
 
         st.success("Personnages mis à jour sur Google Drive.")
     except Exception as e:

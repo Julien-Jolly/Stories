@@ -334,7 +334,7 @@ def save_story(story, theme, keywords, users, image_paths):
         except FileNotFoundError:
             stories_users = {}
 
-        if st.session_state["username"] not in stories_users:
+        if not isinstance(stories_users.get(st.session_state["username"]), list):
             stories_users[st.session_state["username"]] = []
 
         if title not in stories_users[st.session_state["username"]]:
@@ -344,8 +344,8 @@ def save_story(story, theme, keywords, users, image_paths):
             json.dump(stories_users, f, indent=4, ensure_ascii=False)
 
         # Mise à jour sur AWS
-        save_json_to_s3(stories, "my-bucket-name", "stories.json")
-        save_json_to_s3(stories_users, "my-bucket-name", "stories_users.json")
+        save_json_to_s3("json/stories_user.json", "jujul", "stories_users.json")
+        save_json_to_s3("json/stories.json", "jujul", "stories.json")
 
     except Exception as e:
         st.error(f"Erreur lors de la sauvegarde de l'histoire : {e}")
