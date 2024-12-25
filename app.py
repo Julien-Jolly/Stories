@@ -344,7 +344,7 @@ def save_story(story, theme, keywords, users, image_paths):
             json.dump(stories_users, f, indent=4, ensure_ascii=False)
 
         # Mise à jour sur AWS
-        save_json_to_s3("json/stories_user.json", "jujul", "stories_users.json")
+        save_json_to_s3("json/stories_users.json", "jujul", "stories_users.json")
         save_json_to_s3("json/stories.json", "jujul", "stories.json")
 
     except Exception as e:
