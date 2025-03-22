@@ -1,10 +1,5 @@
 .env
-.venv/
-json/
+.venv1/
 .idea/
 __pycache__/
-test.py
-piper/
-images/
-images_source/
 .streamlit/
