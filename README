@@ -1,0 +1,128 @@
+Générateur d'Histoires pour Enfants
+Streamlit Python License
+Bienvenue dans Générateur d'Histoires pour Enfants, une application web développée avec Streamlit qui permet de créer des histoires originales pour enfants, accompagnées d’illustrations générées par IA. Ce projet utilise SQLite pour la gestion des données, AWS S3 pour le stockage cloud, et l’API OpenAI pour générer du texte et des images.
+Fonctionnalités
+Création de compte et connexion : Les utilisateurs peuvent s’inscrire, se connecter ou réinitialiser leur mot de passe.
+
+Génération d’histoires : Créez des histoires personnalisées basées sur un thème, des mots-clés et des personnages choisis.
+
+Illustrations : Génération d’images pour chaque paragraphe avec DALL·E, dans un style adapté aux enfants.
+
+Historique : Consultez et relisez vos histoires enregistrées.
+
+Synchronisation cloud : Les données sont sauvegardées localement et synchronisées avec AWS S3.
+
+Démo
+Déployé sur Streamlit Cloud (remplacez par le lien de votre application une fois déployée).
+Prérequis
+Avant de lancer le projet, assurez-vous d’avoir :
+Python 3.12 installé.
+
+Un compte AWS avec des clés d’accès (pour S3).
+
+Une clé API OpenAI.
+
+Un compte Gmail pour l’envoi des emails de réinitialisation (facultatif).
+
+Installation
+Cloner le dépôt :
+bash
+
+git clone https://github.com/votre-username/stories.git
+cd stories
+
+Créer un environnement virtuel :
+bash
+
+python -m venv venv
+source venv/bin/activate  # Sur Windows : venv\Scripts\activate
+
+Installer les dépendances :
+bash
+
+pip install -r requirements.txt
+
+Configurer les secrets :
+Créez un fichier .streamlit/secrets.toml avec les informations suivantes :
+toml
+
+[AWS]
+YOUR_ACCESS_KEY = "votre-clé-d'accès-aws"
+YOUR_SECRET_KEY = "votre-clé-secrète-aws"
+
+[openai]
+OPENAI_API_KEY = "votre-clé-api-openai"
+
+[gmail]
+sender_email = "votre-email@gmail.com"
+sender_password = "votre-mot-de-passe-d-application-gmail"
+
+Note : Pour Gmail, utilisez un mot de passe d’application si la vérification en deux étapes est activée.
+
+Initialiser la base de données :
+Si vous migrez depuis des fichiers JSON (stories_users.json, personnages.json, stories.json), exécutez :
+bash
+
+python db_init.py
+
+Sinon, la base SQLite (stories.db) sera créée automatiquement au premier lancement.
+
+Lancer l’application :
+bash
+
+streamlit run app.py
+
+Utilisation
+Ouvrez l’application dans votre navigateur (par défaut : http://localhost:8501).
+
+Créez un compte ou connectez-vous.
+
+Choisissez un thème, des personnages et des mots-clés dans la barre latérale, puis cliquez sur "Lancer" pour générer une histoire.
+
+Consultez vos histoires enregistrées via l’option "histoires enregistrées".
+
+Déconnectez-vous avec le bouton "Quitter".
+
+Structure du projet
+
+stories/
+├── app.py              # Application principale Streamlit
+├── make_prompt.py      # Génération des prompts pour OpenAI
+├── users.py            # Gestion des utilisateurs et authentification
+├── db_init.py          # Script pour initialiser la base SQLite depuis JSON
+├── .streamlit/
+│   └── secrets.toml    # Fichier de configuration des secrets (non versionné)
+├── requirements.txt    # Dépendances Python
+└── README.md           # Ce fichier
+
+Déploiement sur Streamlit Cloud
+Poussez votre code sur un dépôt GitHub.
+
+Connectez-vous à Streamlit Cloud.
+
+Créez une nouvelle application en liant votre dépôt.
+
+Ajoutez les secrets (AWS, OpenAI, Gmail) dans l’interface de Streamlit Cloud sous "Advanced Settings".
+
+Déployez !
+
+Contribuer
+Les contributions sont les bienvenues ! Pour contribuer :
+Forkez le dépôt.
+
+Créez une branche pour vos modifications (git checkout -b feature/ma-fonctionnalite).
+
+Commitez vos changements (git commit -m "Ajout de ma fonctionnalité").
+
+Poussez vers votre fork (git push origin feature/ma-fonctionnalite).
+
+Ouvrez une Pull Request.
+
+Problèmes connus
+La génération d’images peut être lente en fonction de la charge sur l’API OpenAI.
+
+Les erreurs de synchronisation S3 sont loguées mais ne bloquent pas l’application.
+
+Licence
+Ce projet est sous licence MIT (LICENSE).
+
