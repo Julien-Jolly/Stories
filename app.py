@@ -17,6 +17,7 @@ import sqlite3
 import boto3
 import tempfile
 import time
+import s3
 
 # Configuration de boto3 pour S3
 AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
