@@ -1,5 +1,6 @@
 .env
 .venv1/
+.venv/
 .idea/
 __pycache__/
 .streamlit/

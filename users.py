@@ -1,4 +1,5 @@
 import streamlit as st
+import os
 import sqlite3
 import hashlib
 import smtplib
@@ -9,12 +10,22 @@ from email.mime.multipart import MIMEMultipart
 import boto3
 
 # Configuration de boto3 pour S3
-s3 = boto3.client(
-    's3',
-    aws_access_key_id=st.secrets["AWS"]["YOUR_ACCESS_KEY"],
-    aws_secret_access_key=st.secrets["AWS"]["YOUR_SECRET_KEY"],
-    region_name='us-east-1'
-)
+AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
+AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
+AWS_REGION = os.getenv("AWS_DEFAULT_REGION", "eu-north-1")
+S3_BUCKET_NAME = "jujul"
+
+try:
+    s3_client = boto3.client(
+        "s3",
+        region_name=AWS_REGION,
+        aws_access_key_id=AWS_ACCESS_KEY_ID,
+        aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
+    )
+    s3_client.head_bucket(Bucket=S3_BUCKET_NAME)
+except Exception as e:
+    st.error(f"Erreur de configuration S3 : {e}. Vérifiez vos credentials et le bucket.")
+    st.stop()
 
 LOCAL_DB_PATH = "stories.db"
 S3_DB_KEY = "database/stories.db"
