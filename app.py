@@ -17,7 +17,6 @@ import sqlite3
 import boto3
 import tempfile
 import time
-import s3
 
 # Configuration de boto3 pour S3
 AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
@@ -26,13 +25,13 @@ AWS_REGION = os.getenv("AWS_DEFAULT_REGION")
 S3_BUCKET_NAME = "jujul"
 
 try:
-    s3_client = boto3.client(
+    s3 = boto3.client(
         "s3",
         region_name=AWS_REGION,
         aws_access_key_id=AWS_ACCESS_KEY_ID,
         aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
     )
-    s3_client.head_bucket(Bucket=S3_BUCKET_NAME)
+    s3.head_bucket(Bucket=S3_BUCKET_NAME)
 except Exception as e:
     st.error(f"Erreur de configuration S3 : {e}. Vérifiez vos credentials et le bucket.")
     st.stop()
